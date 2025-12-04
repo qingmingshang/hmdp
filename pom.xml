@@ -15,8 +15,8 @@
     </parent>
 
     <properties>
-        <maven.compiler.source>8</maven.compiler.source>
-        <maven.compiler.target>8</maven.compiler.target>
+        <maven.compiler.source>11</maven.compiler.source>
+        <maven.compiler.target>11</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
@@ -69,6 +69,26 @@
 
     <build>
         <plugins>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version> <!-- 兼容 JDK 11 的稳定版本 -->
+                <configuration>
+                    <source>${maven.compiler.source}</source>
+                    <target>${maven.compiler.target}</target>
+                    <encoding>${project.build.sourceEncoding}</encoding>
+                    <!-- 关键：添加 JDK 11 兼容参数，解决内部 API 冲突 -->
+                    <compilerArgs>
+                        <arg>-parameters</arg> <!-- 保留方法参数名（MyBatis 必需） -->
+                        <arg>--add-modules=ALL-SYSTEM</arg> <!-- 适配 JDK 9+ 模块化 -->
+                    </compilerArgs>
+                    <!-- 可选：指定 JDK 11 的工具链（避免 IDE 缓存冲突） -->
+                    <fork>true</fork>
+                    <executable>${java.home}/bin/javac</executable>
+                </configuration>
+            </plugin>
+
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>

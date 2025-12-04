@@ -71,10 +71,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
     public Result login(LoginFormDTO loginForm, HttpSession session) {
         //校验手机号
         String phone = loginForm.getPhone();
-        if (RegexUtils.isPhoneInvalid(phone)) {
-            //手机号不符合
-            return Result.fail("手机号格式错误");
-        }
+//        if (RegexUtils.isPhoneInvalid(phone)) {
+//            //手机号不符合
+//            return Result.fail("手机号格式错误");
+//        }
         //从redis中获取验证码 校验验证码
         /*  Object cacheCode = session.getAttribute("code");*/
         String cacheCode = stringRedisTemplate.opsForValue().get(LOGIN_CODE_KEY + phone);

@@ -203,51 +203,75 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
 
     @Override
     public Result queryShopByType(Integer typeId, Integer current, Double x, Double y) {
-        //判断是否需要坐标查询
+        // 判断是否需要坐标查询
         if (x == null || y == null) {
-            //不需要坐标查询
+            // 不需要坐标查询
             Page<Shop> page = lambdaQuery()
                     .eq(Shop::getTypeId, typeId)
                     .page(new Page<>(current, SystemConstants.MAX_PAGE_SIZE));
             return Result.ok(page.getRecords());
         }
-        //计算分页参数
+
+        // 计算分页参数
         int from = (current - 1) * SystemConstants.MAX_PAGE_SIZE;
         int end = current * SystemConstants.MAX_PAGE_SIZE;
-        //查询redis 距离排序 分页
-        String key= SHOP_GEO_KEY+typeId;
+
+        // 查询redis 距离排序 分页
+        String key = SHOP_GEO_KEY + typeId;
         GeoResults<RedisGeoCommands.GeoLocation<String>> results = stringRedisTemplate.opsForGeo()
                 .search(key
                         , GeoReference.fromCoordinate(x, y)
                         , new Distance(5000)
                         , RedisGeoCommands.GeoSearchCommandArgs.newGeoSearchArgs().includeDistance().limit(end)
                 );
-        //解析出id
-        if (results==null){
+
+        // 解析出id：第一步判空（redis查询结果为空）
+        if (results == null || results.getContent().isEmpty()) {
             return Result.ok(Collections.emptyList());
         }
+
         List<GeoResult<RedisGeoCommands.GeoLocation<String>>> content = results.getContent();
-        if (content.size()<from){
-            //没有下一页
-            return Result.ok();
+        // 判空：避免后续skip(from)操作后列表为空
+        if (content.size() < from) {
+            // 没有下一页，返回空列表
+            return Result.ok(Collections.emptyList());
         }
-        //截取
-        List<Long> ids=new ArrayList<>(content.size());
-        Map<String,Distance> distanceMap=new HashMap<>();
-        content.stream().skip(from).forEach(result->{
-            //店铺id
-            String shopId = result.getContent().getName();
-            ids.add(Long.valueOf(shopId));
-            //距离
-            Distance distance = result.getDistance();
-            distanceMap.put(shopId,distance);
-        });
-        //根据id查询shop
+
+        // 截取：从from开始，到end结束（补充limit，避免截取过多）
+        List<Long> ids = new ArrayList<>();
+        Map<String, Distance> distanceMap = new HashMap<>();
+        content.stream()
+                .skip(from)          // 跳过前面的记录
+                .limit(end - from)   // 只取当前页需要的数量（关键：避免截取超出范围）
+                .forEach(result -> {
+                    // 店铺id
+                    String shopId = result.getContent().getName();
+                    ids.add(Long.valueOf(shopId));
+                    // 距离
+                    Distance distance = result.getDistance();
+                    distanceMap.put(shopId, distance);
+                });
+
+        // 核心修复：判断截取后的ids是否为空，为空直接返回空列表
+        if (ids.isEmpty()) {
+            return Result.ok(Collections.emptyList());
+        }
+
+        // 根据id查询shop：此时ids非空，不会拼接非法SQL
         String join = StrUtil.join(",", ids);
-        List<Shop> shopList = lambdaQuery().in(Shop::getId, ids).last("order by field(id,"+join+")").list();
+        List<Shop> shopList = lambdaQuery()
+                .in(Shop::getId, ids)
+                .last("order by field(id," + join + ")")
+                .list();
+
+        // 给店铺设置距离（判空避免NPE）
         for (Shop shop : shopList) {
-            shop.setDistance(distanceMap.get(shop.getId().toString()).getValue());
+            Distance distance = distanceMap.get(shop.getId().toString());
+            if (distance != null) {
+                shop.setDistance(distance.getValue());
+            }
         }
+
         return Result.ok(shopList);
     }
 
